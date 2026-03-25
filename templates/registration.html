@@ -1,0 +1,212 @@
+{% extends "base.html" %}
+{% set title = "Register — AI Lip Reader" %}
+
+{% block content %}
+  <div class="grid gap-8 lg:grid-cols-2 lg:items-start">
+    <div class="rounded-3xl border border-white/10 bg-white/5 p-6">
+      <h2 class="text-xl font-semibold text-white">Create your account</h2>
+      <p class="mt-2 text-sm text-slate-300">
+        After registration, record a short lip movement sequence to bind liveness to your face.
+      </p>
+
+      <form class="mt-6 grid gap-4" action="{{ url_for('register') }}" method="post" autocomplete="off">
+        <div>
+          <label class="text-xs text-slate-300">Username</label>
+          <input
+            name="username"
+            required
+            class="mt-1 w-full rounded-xl border border-white/10 bg-slate-950/40 px-4 py-3 text-sm text-white outline-none ring-0 placeholder:text-slate-500 focus:border-cyan-400/60"
+            placeholder="e.g. asrock"
+          />
+        </div>
+        <div>
+          <label class="text-xs text-slate-300">Password</label>
+          <input
+            type="password"
+            name="password"
+            required
+            class="mt-1 w-full rounded-xl border border-white/10 bg-slate-950/40 px-4 py-3 text-sm text-white outline-none ring-0 placeholder:text-slate-500 focus:border-cyan-400/60"
+            placeholder="••••••••"
+          />
+        </div>
+        <div>
+          <label class="text-xs text-slate-300">Confirm password</label>
+          <input
+            type="password"
+            name="confirm_password"
+            required
+            class="mt-1 w-full rounded-xl border border-white/10 bg-slate-950/40 px-4 py-3 text-sm text-white outline-none ring-0 placeholder:text-slate-500 focus:border-cyan-400/60"
+            placeholder="••••••••"
+          />
+        </div>
+        <button
+          class="mt-2 inline-flex items-center justify-center rounded-xl bg-white px-5 py-3 text-sm font-semibold text-slate-950 hover:bg-slate-100"
+          type="submit"
+        >
+          Create account
+        </button>
+      </form>
+
+      {% if username %}
+        <div class="mt-6 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4 text-sm text-emerald-200">
+          Logged in as <span class="font-semibold">{{ username }}</span>. Now record your lip movement.
+        </div>
+      {% else %}
+        <div class="mt-6 rounded-2xl border border-white/10 bg-slate-950/40 p-4 text-sm text-slate-300">
+          Create the account first — then this page will unlock recording controls.
+        </div>
+      {% endif %}
+    </div>
+
+    <div class="rounded-3xl border border-white/10 bg-white/5 p-6">
+      <div class="flex items-start justify-between gap-6">
+        <div>
+          <h2 class="text-xl font-semibold text-white">Registration capture</h2>
+          <p class="mt-2 text-sm text-slate-300">Keep your face centered and move lips naturally for a few seconds.</p>
+        </div>
+        <div id="faceBadge" class="rounded-2xl border border-white/10 bg-slate-950/40 px-3 py-2 text-xs text-slate-300">
+          Face: …
+        </div>
+      </div>
+
+      <div class="mt-5 overflow-hidden rounded-2xl border border-white/10 bg-slate-950/40">
+        <img id="cam" src="{{ url_for('video_feed') }}" class="block w-full" alt="camera" />
+      </div>
+
+      <div class="mt-4 flex items-center justify-between gap-4">
+        <div class="text-sm text-slate-300">
+          Status: <span id="recStatus" class="font-semibold text-slate-100">Idle</span>
+        </div>
+        <div class="text-xs text-slate-400"><span id="secs">0.0</span>s</div>
+      </div>
+
+      <div class="mt-3 h-2 w-full overflow-hidden rounded-full bg-white/10">
+        <div id="bar" class="h-full w-0 rounded-full bg-gradient-to-r from-fuchsia-500 to-cyan-400 transition-[width] duration-150"></div>
+      </div>
+
+      <div class="mt-5 flex flex-wrap gap-3">
+        <button
+          id="startBtn"
+          class="rounded-xl bg-white px-5 py-3 text-sm font-semibold text-slate-950 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+          {% if not username %}disabled{% endif %}
+        >
+          Start
+        </button>
+        <button
+          id="stopBtn"
+          class="rounded-xl border border-white/15 bg-white/5 px-5 py-3 text-sm font-semibold text-white hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+          {% if not username %}disabled{% endif %}
+        >
+          Stop
+        </button>
+        <a
+          href="{{ url_for('record_login') }}"
+          class="ml-auto rounded-xl border border-white/15 bg-slate-950/40 px-5 py-3 text-sm font-semibold text-white hover:bg-white/10"
+        >
+          Go to verification →
+        </a>
+      </div>
+
+      <div id="toast" class="mt-4 hidden rounded-2xl border border-white/10 bg-slate-950/60 p-4 text-sm text-slate-200"></div>
+    </div>
+  </div>
+
+  <script>
+    const faceBadge = document.getElementById("faceBadge");
+    const recStatus = document.getElementById("recStatus");
+    const bar = document.getElementById("bar");
+    const secs = document.getElementById("secs");
+    const toast = document.getElementById("toast");
+    const startBtn = document.getElementById("startBtn");
+    const stopBtn = document.getElementById("stopBtn");
+
+    const RECORD_MS = 4500;
+    let startAt = null;
+    let ticking = null;
+
+    function showToast(msg, ok = true) {
+      toast.classList.remove("hidden");
+      toast.textContent = msg;
+      toast.className =
+        "mt-4 rounded-2xl border p-4 text-sm " +
+        (ok
+          ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-200"
+          : "border-rose-400/20 bg-rose-400/10 text-rose-200");
+      setTimeout(() => toast.classList.add("hidden"), 4500);
+    }
+
+    async function pollStatus() {
+      try {
+        const res = await fetch("{{ url_for('api_status') }}", { cache: "no-store" });
+        const s = await res.json();
+        faceBadge.textContent = s.faceDetected ? "Face: detected" : "Face: not detected";
+        faceBadge.className =
+          "rounded-2xl px-3 py-2 text-xs border " +
+          (s.faceDetected
+            ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-200"
+            : "border-rose-400/20 bg-rose-400/10 text-rose-200");
+      } catch (_) {}
+    }
+
+    function setProgress() {
+      if (!startAt) return;
+      const elapsed = performance.now() - startAt;
+      const p = Math.max(0, Math.min(1, elapsed / RECORD_MS));
+      bar.style.width = Math.round(p * 100) + "%";
+      secs.textContent = (elapsed / 1000).toFixed(1);
+      if (elapsed >= RECORD_MS) stopRecording();
+    }
+
+    async function startRecording() {
+      showToast("Starting recording…");
+      const res = await fetch("{{ url_for('start_recording') }}", {
+        method: "POST",
+        headers: { Accept: "application/json", "X-Requested-With": "XMLHttpRequest" },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.ok === false) {
+        showToast(data.error || "Failed to start recording", false);
+        return;
+      }
+      recStatus.textContent = "Recording";
+      startAt = performance.now();
+      if (ticking) clearInterval(ticking);
+      ticking = setInterval(setProgress, 100);
+    }
+
+    async function stopRecording() {
+      if (ticking) clearInterval(ticking);
+      ticking = null;
+      startAt = null;
+      bar.style.width = "0%";
+      secs.textContent = "0.0";
+      recStatus.textContent = "Saving…";
+
+      const res = await fetch("{{ url_for('stop_recording') }}", {
+        method: "POST",
+        headers: { Accept: "application/json", "X-Requested-With": "XMLHttpRequest" },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.ok === false) {
+        recStatus.textContent = "Idle";
+        showToast(data.error || "Failed to stop/save recording", false);
+        return;
+      }
+      recStatus.textContent = "Idle";
+      showToast("Saved! Now go to verification and repeat the same lip motion.");
+    }
+
+    startBtn?.addEventListener("click", (e) => {
+      e.preventDefault();
+      startRecording();
+    });
+    stopBtn?.addEventListener("click", (e) => {
+      e.preventDefault();
+      stopRecording();
+    });
+
+    pollStatus();
+    setInterval(pollStatus, 350);
+  </script>
+{% endblock %}
+

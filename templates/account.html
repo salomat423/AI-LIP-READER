@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% set title = "Account — AI Lip Reader" %}
+
+{% block content %}
+  <div class="mx-auto grid max-w-3xl gap-6">
+    <div class="rounded-3xl border border-white/10 bg-white/5 p-8">
+      <h2 class="text-2xl font-semibold text-white">Account</h2>
+      <p class="mt-2 text-sm text-slate-300">Protected area after successful verification.</p>
+
+      {% if msg %}
+        <div class="mt-6 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4 text-sm text-emerald-200">
+          {{ msg }}
+        </div>
+      {% endif %}
+
+      <div class="mt-6 rounded-2xl border border-white/10 bg-slate-950/40 p-4 text-sm text-slate-200">
+        User: <span class="font-semibold">{{ username or "anonymous" }}</span>
+      </div>
+
+      <div class="mt-6 flex flex-wrap gap-3">
+        <a href="{{ url_for('record_login') }}" class="rounded-xl bg-white px-5 py-3 text-sm font-semibold text-slate-950 hover:bg-slate-100">
+          Re-verify
+        </a>
+        <a href="{{ url_for('landing') }}" class="rounded-xl border border-white/15 bg-white/5 px-5 py-3 text-sm font-semibold text-white hover:bg-white/10">
+          Back home
+        </a>
+      </div>
+    </div>
+  </div>
+{% endblock %}
+
