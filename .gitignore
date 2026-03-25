@@ -1,0 +1,7 @@
+captured_faces/
+*.dat
+*.csv
+__pycache__/
+*.pyc
+*.jpg
+users.csv
